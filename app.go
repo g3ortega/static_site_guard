@@ -1,25 +1,30 @@
 package main
 
 import (
-	"github.com/g3ortega/hugo-auth/authentication"
+	"log"
+	"os"
+
+	"github.com/g3ortega/static_site_guard/authentication"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/gofiber/storage/sqlite3"
 	"github.com/joho/godotenv"
 	"github.com/markbates/goth/providers/github"
 	"github.com/shareed2k/goth_fiber"
-	"log"
-	"os"
-	"time"
 
 	"github.com/markbates/goth"
+
+	"github.com/gofiber/storage/postgres/v3"
 
 	"github.com/gofiber/template/html"
 )
 
 func main() {
-	godotenv.Load()
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	engine := html.New("./views", ".html")
 
 	app := fiber.New(fiber.Config{
@@ -30,26 +35,18 @@ func main() {
 		github.New(os.Getenv("GITHUB_KEY"), os.Getenv("GITHUB_SECRET"), os.Getenv("GITHUB_CALLBACK")),
 	)
 
-	//// Initialize default config
-	storage := sqlite3.New(sqlite3.Config{
-		Database:        "./static_site_guard.sqlite3",
-		Table:           "static_site_guard",
-		Reset:           false,
-		GCInterval:      10 * time.Second,
-		MaxOpenConns:    100,
-		MaxIdleConns:    100,
-		ConnMaxLifetime: 1 * time.Second,
+	storage := postgres.New(postgres.Config{
+		ConnectionURI: os.Getenv("POSTGRES_DATABASE_URL"),
+		Table:         "sessions",
+		Reset:         true,
 	})
 
-	// optional config
 	config := session.Config{
 		Storage:        storage,
 		CookieSameSite: "Lax",
 	}
 
-	// create session handler
 	store := session.New(config)
-
 	goth_fiber.SessionStore = store
 
 	app.Use(logger.New())

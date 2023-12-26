@@ -1,17 +1,26 @@
 package authentication
 
 import (
-	"github.com/g3ortega/hugo-auth/encrypt_tools"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/shareed2k/goth_fiber"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/g3ortega/static_site_guard/encrypt_tools"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/shareed2k/goth_fiber"
+)
+
+const (
+	loginPath         = "/login"
+	loginGithubPath   = "/login/github"
+	notAuthorizedPath = "/not_authorized"
+	authCallbackPath  = "/auth/callback/github"
+	logoutPath        = "/logout"
 )
 
 func Callback(ctx *fiber.Ctx, store *session.Store) error {
-	user, err := goth_fiber.CompleteUserAuth(ctx)
+	user, _ := goth_fiber.CompleteUserAuth(ctx)
 	sess, err := store.Get(ctx)
 	if err != nil {
 		panic(err)
@@ -22,10 +31,14 @@ func Callback(ctx *fiber.Ctx, store *session.Store) error {
 	} else {
 		encryptedUsername := encrypt_tools.Encrypt(os.Getenv("SECRET_KEY"), user.NickName)
 		sess.Set("userName", encryptedUsername)
-		sess.Save()
+		err := sess.Save()
+
+		if err != nil {
+			return ctx.Status(400).JSON(map[string]string{"message": err.Error()})
+		}
 	}
 
-	if EligibleUser(user.NickName) {
+	if eligibleUser(user.NickName) {
 		return ctx.Redirect("/")
 	} else {
 		return ctx.Redirect("/logout")
@@ -43,33 +56,38 @@ func Logout(ctx *fiber.Ctx, store *session.Store) error {
 	}
 
 	userName := sess.Get("userName")
-	log.Println(userName)
 
 	if userName != nil {
 		sess.Delete("userName")
-		sess.Destroy()
-		sess.Save()
+		errSessionDestroy := sess.Destroy()
+		if errSessionDestroy != nil {
+			log.Println(errSessionDestroy)
+		}
+
+		errSessionSave := sess.Save()
+		if errSessionSave != nil {
+			log.Println(errSessionSave)
+		}
 	}
 
 	return ctx.Redirect("/login")
 }
 
-func EligibleUser(userName string) bool {
+func eligibleUser(userName string) bool {
 	eligibleUsernames := os.Getenv("ELIGIBLE_USERNAMES")
 	if eligibleUsernames == "" {
 		log.Fatal("ELIGIBLE_USERNAMES is not set")
 	}
 
-	arr := strings.Split(eligibleUsernames, ",")
-
-	if contains(arr, userName) {
-		return true
-	} else {
-		return false
+	set := make(map[string]bool)
+	for _, v := range strings.Split(eligibleUsernames, ",") {
+		set[v] = true
 	}
+
+	return set[userName]
 }
 
-func SessionHandler(ctx *fiber.Ctx, store *session.Store) error {
+func SessionHandler(ctx *fiber.Ctx, store *session.Store) (err error) {
 	sess, err := store.Get(ctx)
 	if err != nil {
 		panic(err)
@@ -81,22 +99,14 @@ func SessionHandler(ctx *fiber.Ctx, store *session.Store) error {
 		userName = encrypt_tools.Decrypt(os.Getenv("SECRET_KEY"), encryptedUsername.(string))
 	}
 
-	if EligibleUser(userName) {
+	switch ctx.Path() {
+	case loginPath, loginGithubPath, notAuthorizedPath, authCallbackPath, logoutPath:
 		return ctx.Next()
-	} else {
-		if ctx.Path() == "/login" || ctx.Path() == "/login/github" || ctx.Path() == "/not_authorized" || ctx.Path() == "/auth/callback/github" || ctx.Path() == "/logout" {
+	default:
+		if eligibleUser(userName) {
 			return ctx.Next()
 		} else {
-			return ctx.Redirect("/not_authorized")
+			return ctx.Redirect(notAuthorizedPath)
 		}
 	}
-}
-
-func contains(arr []string, value string) bool {
-	for _, v := range arr {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
