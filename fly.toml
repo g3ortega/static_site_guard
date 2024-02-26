@@ -9,41 +9,41 @@ kill_signal = "SIGINT"
 kill_timeout = "5s"
 
 [experimental]
-  auto_rollback = true
+auto_rollback = true
 
 [build]
-  builder = "paketobuildpacks/builder:base"
-  buildpacks = ["gcr.io/paketo-buildpacks/go"]
-  [build.args]
-    BP_KEEP_FILES = "content/*:public/*:views/*"
+builder = "paketobuildpacks/builder:base"
+buildpacks = ["gcr.io/paketo-buildpacks/go"]
+[build.args]
+BP_KEEP_FILES = "content/*:public/*:views/*"
 
 [env]
-  PORT = "8088"
+PORT = "8088"
 
 [[services]]
-  protocol = "tcp"
-  internal_port = 8088
-  processes = ["app"]
+protocol = "tcp"
+internal_port = 8088
+processes = ["app"]
 
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-    force_https = true
+[[services.ports]]
+port = 80
+handlers = ["http"]
+force_https = true
 
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 25
-    soft_limit = 20
+[[services.ports]]
+port = 443
+handlers = ["tls", "http"]
+[services.concurrency]
+type = "connections"
+hard_limit = 25
+soft_limit = 20
 
-  [[services.tcp_checks]]
-    interval = "15s"
-    timeout = "2s"
-    grace_period = "1s"
+[[services.tcp_checks]]
+interval = "15s"
+timeout = "2s"
+grace_period = "1s"
 
 [[vm]]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 512
+cpu_kind = "shared"
+cpus = 1
+memory_mb = 512
